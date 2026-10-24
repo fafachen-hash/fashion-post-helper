@@ -38,6 +38,9 @@
     #preview { width:100%; max-height:330px; object-fit:contain; border-radius:12px; margin-top:10px; background:#f4f0ec; display:none; }
     .photo-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:8px; margin-top:10px; }
     .photo-gallery img { width:100%; height:110px; object-fit:cover; border-radius:10px; background:#f4f0ec; }
+    .catalog-item { border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:9px; }
+    .catalog-item strong { display:block; margin-bottom:5px; }
+    .catalog-item p { margin:4px 0; color:var(--muted); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
     button { border:0; border-radius:12px; min-height:48px; padding:12px 16px; font:inherit; font-weight:700; cursor:pointer; }
     .primary { width:100%; background:var(--accent); color:#fff; }
     .secondary { background:#efe7df; color:var(--ink); }
@@ -51,6 +54,7 @@
 <body>
   <main>
     <header><h1>服飾貼文小幫手</h1><p>填好商品資料，快速整理成可以貼到 LINE 的繁體中文貼文。</p></header>
+    <section class="result" aria-labelledby="catalogTitle"><h2 id="catalogTitle">商品目錄與搜尋</h2><p class="hint">第一次使用時，先匯入 OneDrive 裡的商品目錄或商品 ZIP。每次新增商品後，下載更新的目錄並上傳回 OneDrive。</p><div class="field"><label for="catalogFiles">匯入商品目錄或商品 ZIP（可多選）</label><input id="catalogFiles" type="file" accept=".json,.zip,application/json,application/zip" multiple></div><div class="field"><label for="catalogSearch">搜尋商品</label><input id="catalogSearch" type="search" placeholder="輸入商品名稱、類別、顏色或尺寸"></div><div class="actions"><button class="secondary" id="downloadCatalog" type="button">下載商品目錄</button><button class="secondary" id="clearCatalog" type="button">清空搜尋目錄</button></div><p id="catalogStatus" class="hint" role="status" aria-live="polite"></p><div id="catalogResults" aria-live="polite"></div></section>
     <form id="productForm">
       <div class="field"><label for="photo">商品照片（可選多張）</label><input id="photo" type="file" accept="image/*" multiple><div id="photoGallery" class="photo-gallery" aria-live="polite"></div><p class="hint">可一次選取多張照片。按「下載商品資料＋照片」會將文字和照片打包成一個 ZIP，之後可上傳到 OneDrive。</p></div>
       <div class="field"><label for="name">商品名稱</label><input id="name" placeholder="例如：柔軟針織開襟衫" required></div>
@@ -74,14 +78,18 @@
       <div class="field"><label for="description">商品特色／補充說明</label><textarea id="description" placeholder="例如：親膚柔軟、適合日常穿搭"></textarea></div>
       <button class="primary" type="submit">產生 LINE 貼文</button>
     </form>
-    <section class="result" aria-labelledby="resultTitle"><h2 id="resultTitle">貼文預覽</h2><textarea id="post" aria-label="產生的貼文" placeholder="填寫商品名稱後，按「產生 LINE 貼文」"></textarea><div class="actions"><button class="secondary" id="copy" type="button">複製貼文</button><button class="secondary" id="downloadPackage" type="button">下載商品資料＋照片</button><button class="secondary" id="clear" type="button">清空資料</button></div><p id="status" class="hint" role="status" aria-live="polite"></p></section>
-    <p class="notice">可將單件商品的文字資料與多張照片下載為 ZIP，再自行上傳到 OneDrive。下載檔案前資料仍只在目前頁面；本版尚未自動連接 OneDrive，也沒有雲端搜尋。</p>
+    <section class="result" aria-labelledby="resultTitle"><h2 id="resultTitle">貼文預覽</h2><textarea id="post" aria-label="產生的貼文" placeholder="填寫商品名稱後，按「產生 LINE 貼文」"></textarea><div class="actions"><button class="secondary" id="copy" type="button">複製貼文</button><button class="secondary" id="sharePostPhotos" type="button">分享貼文與照片</button><button class="secondary" id="downloadPackage" type="button">下載商品資料＋照片</button><button class="secondary" id="clear" type="button">清空資料</button></div><p id="status" class="hint" role="status" aria-live="polite"></p></section>
+    <p class="notice">商品目錄會暫存在目前瀏覽器。請把「商品目錄.json」也上傳到 OneDrive；換裝置時，先從 OneDrive 下載並匯入目錄。舊商品可匯入其商品 ZIP。此版不會自動連接 OneDrive。</p>
   </main>
   <script>
     const $ = id => document.getElementById(id);
     let photoUrls = [];
     let selectedPhotos = [];
     let measurementValues = {};
+    let currentProductId = '';
+    let currentArchiveName = '';
+    const catalogStorageKey = 'fashionPostHelperCatalogV1';
+    let catalogItems = (() => { try { const saved = JSON.parse(localStorage.getItem(catalogStorageKey) || '[]'); return Array.isArray(saved) ? saved : []; } catch { return []; } })();
     const sizeFields = { '女裝': $('womenSizes'), '大童': $('bigChildSizes'), '小童': $('smallChildSizes'), '男裝': $('otherSizes'), '其他': $('otherSizes') };
     const measurementFields = [['chestWidth','胸寬'],['garmentLength','衣長'],['waistWidth','腰寬'],['hipWidth','臀寬'],['pantsLength','褲長']];
     const measurementKey = (category, size) => `${category}::${size}`;
@@ -130,6 +138,77 @@
       const select = !boxes.every(box => box.checked); boxes.forEach(box => { box.checked = select; }); button.textContent = select ? '取消全選' : '全選尺寸'; renderMeasurementFields();
     }));
     updateSizeFields();
+    function saveCatalog() { try { localStorage.setItem(catalogStorageKey, JSON.stringify(catalogItems)); } catch { $('catalogStatus').textContent = '此瀏覽器暫存空間不足，請下載商品目錄保存。'; } }
+    function catalogSearchText(item) { return [item.name,item.category,item.colors,item.price,item.deadlineMonth,item.deadlineDay,...(item.sizes || []),JSON.stringify(item.measurements || {}),item.description,item.post,item.archiveName].join(' ').toLocaleLowerCase(); }
+    function renderCatalog() {
+      const query = $('catalogSearch').value.trim().toLocaleLowerCase();
+      const matches = catalogItems.filter(item => !query || catalogSearchText(item).includes(query)).sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      const result = $('catalogResults'); result.replaceChildren();
+      if (!catalogItems.length) { result.textContent = '目前沒有已匯入的商品。'; return; }
+      if (!matches.length) { result.textContent = '找不到符合的商品。'; return; }
+      matches.forEach(item => {
+        const card = document.createElement('article'); card.className = 'catalog-item';
+        const title = document.createElement('strong'); title.textContent = item.name || '未命名商品';
+        const detail = document.createElement('p'); detail.textContent = [item.category,item.price ? `NT$${item.price}` : '',item.colors ? `顏色：${item.colors}` : ''].filter(Boolean).join('｜');
+        const sizes = document.createElement('p'); sizes.textContent = item.sizes?.length ? `尺寸：${item.sizes.join('、')}` : '尺寸：未填';
+        const archive = document.createElement('p'); archive.textContent = item.archiveName ? `OneDrive 商品 ZIP：${item.archiveName}` : '尚未記錄商品 ZIP 檔名';
+        const post = document.createElement('p'); post.textContent = item.post ? `貼文：${item.post}` : '';
+        card.append(title,detail,sizes,archive); if (post.textContent) card.append(post); result.append(card);
+      });
+    }
+    function normalizeCatalogItem(item, archiveName = '') {
+      const normalized = {...item}; normalized.name = String(item.name || '').trim();
+      normalized.id = item.id || `import-${archiveName || normalized.name}-${item.createdAt || ''}`;
+      normalized.createdAt = item.createdAt || new Date().toISOString(); normalized.archiveName = item.archiveName || archiveName || '';
+      normalized.sizes = Array.isArray(item.sizes) ? item.sizes : []; return normalized;
+    }
+    function mergeCatalogItem(item, archiveName = '') {
+      const normalized = normalizeCatalogItem(item, archiveName); if (!normalized.name) return false;
+      const index = catalogItems.findIndex(existing => existing.id === normalized.id || (archiveName && existing.archiveName === archiveName));
+      if (index >= 0) catalogItems[index] = {...catalogItems[index],...normalized}; else catalogItems.push(normalized); return true;
+    }
+    function zipProductJson(fileBytes) {
+      const view = new DataView(fileBytes.buffer, fileBytes.byteOffset, fileBytes.byteLength); let eocd = -1;
+      for (let i = fileBytes.length - 22; i >= Math.max(0,fileBytes.length - 65558); i--) if (view.getUint32(i,true) === 0x06054b50) { eocd = i; break; }
+      if (eocd < 0) throw new Error('找不到 ZIP 目錄');
+      const count = view.getUint16(eocd + 10,true); let cursor = view.getUint32(eocd + 16,true); const decoder = new TextDecoder();
+      for (let i = 0; i < count; i++) {
+        if (view.getUint32(cursor,true) !== 0x02014b50) throw new Error('ZIP 格式不支援');
+        const method = view.getUint16(cursor + 10,true), compressedSize = view.getUint32(cursor + 20,true), nameLength = view.getUint16(cursor + 28,true), extraLength = view.getUint16(cursor + 30,true), commentLength = view.getUint16(cursor + 32,true), localOffset = view.getUint32(cursor + 42,true);
+        const entryName = decoder.decode(fileBytes.subarray(cursor + 46,cursor + 46 + nameLength));
+        if (entryName.endsWith('商品資料.json')) {
+          if (method !== 0) throw new Error('此 ZIP 使用不支援的壓縮格式');
+          const localNameLength = view.getUint16(localOffset + 26,true), localExtraLength = view.getUint16(localOffset + 28,true), dataStart = localOffset + 30 + localNameLength + localExtraLength;
+          return JSON.parse(decoder.decode(fileBytes.subarray(dataStart,dataStart + compressedSize)));
+        }
+        cursor += 46 + nameLength + extraLength + commentLength;
+      }
+      throw new Error('ZIP 裡找不到商品資料.json');
+    }
+    $('catalogSearch').addEventListener('input',renderCatalog);
+    $('catalogFiles').addEventListener('change',async event => {
+      let imported = 0; const errors = [];
+      for (const file of Array.from(event.target.files || [])) {
+        try {
+          if (file.name.toLowerCase().endsWith('.zip')) imported += mergeCatalogItem(zipProductJson(new Uint8Array(await file.arrayBuffer())),file.name) ? 1 : 0;
+          else {
+            const data = JSON.parse(await file.text());
+            if (Array.isArray(data.items)) data.items.forEach(item => { imported += mergeCatalogItem(item) ? 1 : 0; });
+            else imported += mergeCatalogItem(data,file.name.replace(/\.json$/i,'-商品資料.zip')) ? 1 : 0;
+          }
+        } catch (error) { errors.push(`${file.name}：${error.message}`); }
+      }
+      saveCatalog(); renderCatalog(); $('catalogStatus').textContent = errors.length ? `已匯入 ${imported} 筆；${errors.join('；')}` : `已匯入／更新 ${imported} 筆商品。`;
+      event.target.value = '';
+    });
+    $('downloadCatalog').addEventListener('click',() => {
+      if (!catalogItems.length) { $('catalogStatus').textContent = '目錄目前沒有商品，請先匯入商品 ZIP 或下載一筆商品資料。'; return; }
+      const contents = JSON.stringify({format:'fashion-post-helper-catalog',version:1,exportedAt:new Date().toISOString(),items:catalogItems},null,2);
+      const url = URL.createObjectURL(new Blob([contents],{type:'application/json'})); const link = document.createElement('a'); link.href=url; link.download='商品目錄.json'; document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+      $('catalogStatus').textContent = '商品目錄已下載；請上傳並取代 OneDrive 裡的舊目錄檔。';
+    });
+    $('clearCatalog').addEventListener('click',() => { if (!confirm('只清除此瀏覽器中的搜尋目錄？OneDrive 的檔案不會刪除。')) return; catalogItems=[]; saveCatalog(); renderCatalog(); $('catalogStatus').textContent='已清空此瀏覽器中的商品目錄。'; });
+    renderCatalog();
     $('photo').addEventListener('change', event => {
       photoUrls.forEach(url => URL.revokeObjectURL(url)); photoUrls = [];
       selectedPhotos = Array.from(event.target.files || []);
@@ -173,12 +252,18 @@
       if (customField.value.trim()) sizes.push(customField.value.trim());
       const photos = selectedPhotos.map((file,index) => `photos/${String(index+1).padStart(2,'0')}-${file.name.replace(/[\\/:*?"<>|]/g,'_')}`);
       const measurements = Object.fromEntries(Object.entries(measurementValues).filter(([key]) => key.startsWith(`${category}::`)));
-      const product = {name,category,price:$('price').value.trim(),colors:$('colors').value.trim(),sizes,deadlineMonth:$('deadlineMonth').value.trim(),deadlineDay:$('deadlineDay').value.trim(),measurements,description:$('description').value.trim(),post:$('post').value,photos:photos.map((path,index)=>({path,name:selectedPhotos[index].name}))};
+      if (!currentProductId) currentProductId = `product-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+      if (!currentArchiveName) {
+        const stamp = new Date().toLocaleString('sv-SE').replace(/[-: ]/g,'').slice(0,12);
+        currentArchiveName = `${name.replace(/[\\/:*?"<>|]/g,'_').slice(0,50) || '商品資料'}-${stamp}-商品資料.zip`;
+      }
+      const product = {id:currentProductId,createdAt:new Date().toISOString(),name,category,price:$('price').value.trim(),colors:$('colors').value.trim(),sizes,deadlineMonth:$('deadlineMonth').value.trim(),deadlineDay:$('deadlineDay').value.trim(),measurements,description:$('description').value.trim(),post:$('post').value,archiveName:currentArchiveName,photos:photos.map((path,index)=>({path,name:selectedPhotos[index].name}))};
       const entries = [{name:'商品資料.json',data:new TextEncoder().encode(JSON.stringify(product,null,2))}];
       for (let i=0;i<selectedPhotos.length;i++) entries.push({name:photos[i],data:new Uint8Array(await selectedPhotos[i].arrayBuffer())});
       const blob = makeZip(entries); const url = URL.createObjectURL(blob); const link = document.createElement('a');
-      const safeName = name.replace(/[\\/:*?"<>|]/g,'_').slice(0,60) || '商品資料'; link.href=url; link.download=`${safeName}-商品資料.zip`; document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
-      $('status').textContent = `已下載 ${selectedPhotos.length} 張照片與商品文字的 ZIP，可將這個檔案上傳到 OneDrive。`;
+      link.href=url; link.download=currentArchiveName; document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+      mergeCatalogItem(product,currentArchiveName); saveCatalog(); renderCatalog();
+      $('status').textContent = '商品 ZIP 已下載並加入此裝置的目錄。請再下載「商品目錄.json」上傳至 OneDrive，之後才能在其他裝置搜尋。';
     });
     $('productForm').addEventListener('submit', event => {
       event.preventDefault();
@@ -205,8 +290,21 @@
       try { await navigator.clipboard.writeText(post.value); $('status').textContent = '已複製，可貼到 LINE。'; }
       catch { post.focus(); post.select(); $('status').textContent = '請長按選取貼文並複製。'; }
     });
+    $('sharePostPhotos').addEventListener('click', async () => {
+      const text = $('post').value.trim();
+      if (!text) { $('status').textContent = '請先產生 LINE 貼文。'; return; }
+      if (!navigator.share) { $('status').textContent = '這個瀏覽器沒有分享選單；請複製貼文，再從相簿選取照片傳到 LINE。'; return; }
+      if (selectedPhotos.length && (!navigator.canShare || !navigator.canShare({files:selectedPhotos}))) { $('status').textContent = '這個瀏覽器目前不能分享照片檔案；請複製貼文，再從相簿選取照片傳到 LINE。'; return; }
+      try {
+        if (selectedPhotos.length) await navigator.share({title:'商品貼文',text,files:selectedPhotos});
+        else await navigator.share({title:'商品貼文',text});
+        $('status').textContent = '分享選單已送出內容。請在選單中選 LINE；照片與文字是否都帶入，由 LINE 的分享支援決定。';
+      } catch (error) {
+        if (error.name !== 'AbortError') $('status').textContent = '分享沒有完成；可再試一次，或分別複製貼文與選取照片。';
+      }
+    });
     $('clear').addEventListener('click', () => {
-      $('productForm').reset(); $('post').value = ''; $('status').textContent = ''; measurementValues = {}; renderMeasurementFields();
+      $('productForm').reset(); $('post').value = ''; $('status').textContent = ''; measurementValues = {}; currentProductId = ''; currentArchiveName = ''; renderMeasurementFields();
       photoUrls.forEach(url => URL.revokeObjectURL(url)); photoUrls = []; selectedPhotos = []; $('photoGallery').replaceChildren();
     });
   </script>
