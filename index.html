@@ -36,6 +36,8 @@
     .measurement-size-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
     .measurement-size-grid .field { margin:0; min-width:0; }
     #preview { width:100%; max-height:330px; object-fit:contain; border-radius:12px; margin-top:10px; background:#f4f0ec; display:none; }
+    .photo-gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:8px; margin-top:10px; }
+    .photo-gallery img { width:100%; height:110px; object-fit:cover; border-radius:10px; background:#f4f0ec; }
     button { border:0; border-radius:12px; min-height:48px; padding:12px 16px; font:inherit; font-weight:700; cursor:pointer; }
     .primary { width:100%; background:var(--accent); color:#fff; }
     .secondary { background:#efe7df; color:var(--ink); }
@@ -50,7 +52,7 @@
   <main>
     <header><h1>服飾貼文小幫手</h1><p>填好商品資料，快速整理成可以貼到 LINE 的繁體中文貼文。</p></header>
     <form id="productForm">
-      <div class="field"><label for="photo">商品照片</label><input id="photo" type="file" accept="image/*"><img id="preview" alt="商品照片預覽"><p class="hint">照片只會在目前頁面預覽，不會上傳或保存到雲端。</p></div>
+      <div class="field"><label for="photo">商品照片（可選多張）</label><input id="photo" type="file" accept="image/*" multiple><div id="photoGallery" class="photo-gallery" aria-live="polite"></div><p class="hint">可一次選取多張照片。按「下載商品資料＋照片」會將文字和照片打包成一個 ZIP，之後可上傳到 OneDrive。</p></div>
       <div class="field"><label for="name">商品名稱</label><input id="name" placeholder="例如：柔軟針織開襟衫" required></div>
       <div class="grid">
         <div class="field"><label for="price">價格（元）</label><input id="price" inputmode="numeric" type="number" min="0" placeholder="例如：590"></div>
@@ -72,12 +74,13 @@
       <div class="field"><label for="description">商品特色／補充說明</label><textarea id="description" placeholder="例如：親膚柔軟、適合日常穿搭"></textarea></div>
       <button class="primary" type="submit">產生 LINE 貼文</button>
     </form>
-    <section class="result" aria-labelledby="resultTitle"><h2 id="resultTitle">貼文預覽</h2><textarea id="post" aria-label="產生的貼文" placeholder="填寫商品名稱後，按「產生 LINE 貼文」"></textarea><div class="actions"><button class="secondary" id="copy" type="button">複製貼文</button><button class="secondary" id="clear" type="button">清空資料</button></div><p id="status" class="hint" role="status" aria-live="polite"></p></section>
-    <p class="notice">目前版本可在手機或電腦填資料、預覽照片、產生及複製貼文。資料只在本頁暫時使用；關閉或重新整理後不保證保留。OneDrive／Excel 雲端保存、商品搜尋與網站發布尚未設定。</p>
+    <section class="result" aria-labelledby="resultTitle"><h2 id="resultTitle">貼文預覽</h2><textarea id="post" aria-label="產生的貼文" placeholder="填寫商品名稱後，按「產生 LINE 貼文」"></textarea><div class="actions"><button class="secondary" id="copy" type="button">複製貼文</button><button class="secondary" id="downloadPackage" type="button">下載商品資料＋照片</button><button class="secondary" id="clear" type="button">清空資料</button></div><p id="status" class="hint" role="status" aria-live="polite"></p></section>
+    <p class="notice">可將單件商品的文字資料與多張照片下載為 ZIP，再自行上傳到 OneDrive。下載檔案前資料仍只在目前頁面；本版尚未自動連接 OneDrive，也沒有雲端搜尋。</p>
   </main>
   <script>
     const $ = id => document.getElementById(id);
-    let previewUrl = '';
+    let photoUrls = [];
+    let selectedPhotos = [];
     let measurementValues = {};
     const sizeFields = { '女裝': $('womenSizes'), '大童': $('bigChildSizes'), '小童': $('smallChildSizes'), '男裝': $('otherSizes'), '其他': $('otherSizes') };
     const measurementFields = [['chestWidth','胸寬'],['garmentLength','衣長'],['waistWidth','腰寬'],['hipWidth','臀寬'],['pantsLength','褲長']];
@@ -128,10 +131,54 @@
     }));
     updateSizeFields();
     $('photo').addEventListener('change', event => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      const file = event.target.files && event.target.files[0]; const image = $('preview');
-      if (!file) { image.style.display = 'none'; image.removeAttribute('src'); return; }
-      previewUrl = URL.createObjectURL(file); image.src = previewUrl; image.style.display = 'block';
+      photoUrls.forEach(url => URL.revokeObjectURL(url)); photoUrls = [];
+      selectedPhotos = Array.from(event.target.files || []);
+      const gallery = $('photoGallery'); gallery.replaceChildren();
+      selectedPhotos.forEach((file, index) => {
+        const url = URL.createObjectURL(file); photoUrls.push(url);
+        const image = document.createElement('img'); image.src = url; image.alt = `商品照片 ${index + 1}`; gallery.append(image);
+      });
+      $('status').textContent = selectedPhotos.length ? `已選取 ${selectedPhotos.length} 張照片。` : '';
+    });
+    function crc32(bytes) {
+      let crc = -1;
+      for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (-(crc & 1) & 0xedb88320); }
+      return (crc ^ -1) >>> 0;
+    }
+    function makeZip(entries) {
+      const encoder = new TextEncoder(); const localParts = []; const centralParts = []; let offset = 0;
+      const u16 = (view, at, value) => view.setUint16(at, value, true);
+      const u32 = (view, at, value) => view.setUint32(at, value, true);
+      entries.forEach(entry => {
+        const name = encoder.encode(entry.name); const data = entry.data; const crc = crc32(data);
+        const local = new Uint8Array(30 + name.length); const lv = new DataView(local.buffer);
+        u32(lv,0,0x04034b50); u16(lv,4,20); u16(lv,6,0x0800); u16(lv,8,0); u16(lv,10,0); u16(lv,12,0x21); u32(lv,14,crc); u32(lv,18,data.length); u32(lv,22,data.length); u16(lv,26,name.length); u16(lv,28,0); local.set(name,30);
+        localParts.push(local,data);
+        const central = new Uint8Array(46 + name.length); const cv = new DataView(central.buffer);
+        u32(cv,0,0x02014b50); u16(cv,4,20); u16(cv,6,20); u16(cv,8,0x0800); u16(cv,10,0); u16(cv,12,0); u16(cv,14,0x21); u32(cv,16,crc); u32(cv,20,data.length); u32(cv,24,data.length); u16(cv,28,name.length); u16(cv,30,0); u16(cv,32,0); u16(cv,34,0); u16(cv,36,0); u32(cv,38,0); u32(cv,42,offset); central.set(name,46);
+        centralParts.push(central); offset += local.length + data.length;
+      });
+      const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0); const end = new Uint8Array(22); const ev = new DataView(end.buffer);
+      u32(ev,0,0x06054b50); u16(ev,4,0); u16(ev,6,0); u16(ev,8,entries.length); u16(ev,10,entries.length); u32(ev,12,centralSize); u32(ev,16,offset); u16(ev,20,0);
+      return new Blob([...localParts,...centralParts,end],{type:'application/zip'});
+    }
+    $('downloadPackage').addEventListener('click', async () => {
+      const name = $('name').value.trim();
+      if (!name) { $('status').textContent = '請先填寫商品名稱。'; $('name').focus(); return; }
+      if (!$('post').value.trim()) $('productForm').requestSubmit();
+      saveMeasurementValues();
+      const category = $('category').value; const activeSizeField = sizeFields[category];
+      const sizes = [...activeSizeField.querySelectorAll('input[name="size"]:checked')].map(input => input.value);
+      const customField = ({'女裝':$('womenCustom'),'大童':$('bigCustom'),'小童':$('smallCustom'),'男裝':$('otherCustom'),'其他':$('otherCustom')})[category];
+      if (customField.value.trim()) sizes.push(customField.value.trim());
+      const photos = selectedPhotos.map((file,index) => `photos/${String(index+1).padStart(2,'0')}-${file.name.replace(/[\\/:*?"<>|]/g,'_')}`);
+      const measurements = Object.fromEntries(Object.entries(measurementValues).filter(([key]) => key.startsWith(`${category}::`)));
+      const product = {name,category,price:$('price').value.trim(),colors:$('colors').value.trim(),sizes,deadlineMonth:$('deadlineMonth').value.trim(),deadlineDay:$('deadlineDay').value.trim(),measurements,description:$('description').value.trim(),post:$('post').value,photos:photos.map((path,index)=>({path,name:selectedPhotos[index].name}))};
+      const entries = [{name:'商品資料.json',data:new TextEncoder().encode(JSON.stringify(product,null,2))}];
+      for (let i=0;i<selectedPhotos.length;i++) entries.push({name:photos[i],data:new Uint8Array(await selectedPhotos[i].arrayBuffer())});
+      const blob = makeZip(entries); const url = URL.createObjectURL(blob); const link = document.createElement('a');
+      const safeName = name.replace(/[\\/:*?"<>|]/g,'_').slice(0,60) || '商品資料'; link.href=url; link.download=`${safeName}-商品資料.zip`; document.body.append(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(url),30000);
+      $('status').textContent = `已下載 ${selectedPhotos.length} 張照片與商品文字的 ZIP，可將這個檔案上傳到 OneDrive。`;
     });
     $('productForm').addEventListener('submit', event => {
       event.preventDefault();
@@ -160,7 +207,7 @@
     });
     $('clear').addEventListener('click', () => {
       $('productForm').reset(); $('post').value = ''; $('status').textContent = ''; measurementValues = {}; renderMeasurementFields();
-      $('preview').style.display = 'none'; $('preview').removeAttribute('src'); if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = '';
+      photoUrls.forEach(url => URL.revokeObjectURL(url)); photoUrls = []; selectedPhotos = []; $('photoGallery').replaceChildren();
     });
   </script>
 </body>
