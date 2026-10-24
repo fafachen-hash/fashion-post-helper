@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f3ee">
+  <title>服飾貼文小幫手</title>
+  <style>
+    :root { color-scheme:light; --ink:#292522; --muted:#766d65; --accent:#8a563d; --paper:#fff; --bg:#f7f3ee; --line:#e9e1d9; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC",sans-serif; }
+    main { width:min(100%,720px); margin:auto; padding:24px 16px calc(44px + env(safe-area-inset-bottom)); }
+    header { margin:4px 2px 22px; }
+    h1 { font-size:25px; margin:0 0 7px; }
+    header p,.hint { color:var(--muted); font-size:14px; line-height:1.6; margin:0; }
+    form,.result { background:var(--paper); border:1px solid var(--line); border-radius:18px; padding:18px; margin:0 0 16px; box-shadow:0 4px 18px #39291a08; }
+    .field { margin:0 0 16px; }
+    label,.legend { display:block; font-weight:650; font-size:14px; margin:0 0 7px; }
+    input,select,textarea { width:100%; border:1px solid #d9cec4; background:#fff; color:var(--ink); border-radius:11px; padding:12px 13px; font:inherit; font-size:16px; }
+    textarea { min-height:82px; resize:vertical; line-height:1.55; }
+    input[type=file] { padding:10px; font-size:14px; }
+    input:focus,select:focus,textarea:focus,button:focus-visible { outline:3px solid #c99c7c66; border-color:var(--accent); }
+    .grid,.date-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .grid .field,.date-fields .field { min-width:0; }
+    fieldset { border:0; padding:0; margin:0 0 16px; }
+    fieldset[hidden] { display:none; }
+    legend { padding:0; }
+    .size-actions { display:flex; justify-content:flex-end; margin:-4px 0 8px; }
+    .size-all { min-height:36px; padding:7px 12px; background:#efe7df; color:var(--accent); font-size:14px; }
+    .size-list { display:grid; gap:8px; }
+    .size-choice { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--line); border-radius:11px; padding:10px 12px; line-height:1.45; font-size:14px; }
+    .size-choice:has(input:checked) { border-color:var(--accent); background:#fbf6f1; }
+    .size-choice input { width:20px; height:20px; flex:0 0 20px; margin:0; accent-color:var(--accent); }
+    .measurement-size { border:1px solid var(--line); border-radius:12px; padding:12px; margin:10px 0; }
+    .measurement-size h3 { font-size:15px; margin:0 0 10px; }
+    .measurement-size-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+    .measurement-size-grid .field { margin:0; min-width:0; }
+    #preview { width:100%; max-height:330px; object-fit:contain; border-radius:12px; margin-top:10px; background:#f4f0ec; display:none; }
+    button { border:0; border-radius:12px; min-height:48px; padding:12px 16px; font:inherit; font-weight:700; cursor:pointer; }
+    .primary { width:100%; background:var(--accent); color:#fff; }
+    .secondary { background:#efe7df; color:var(--ink); }
+    .result h2 { margin:0 0 12px; font-size:18px; }
+    #post { min-height:240px; white-space:pre-wrap; }
+    .actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+    .notice { font-size:13px; color:var(--muted); line-height:1.6; margin:15px 2px 0; }
+    @media (max-width:430px) { main { padding:20px 13px 38px; } form,.result { padding:15px; } .grid,.date-fields { gap:9px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>服飾貼文小幫手</h1><p>填好商品資料，快速整理成可以貼到 LINE 的繁體中文貼文。</p></header>
+    <form id="productForm">
+      <div class="field"><label for="photo">商品照片</label><input id="photo" type="file" accept="image/*" capture="environment"><img id="preview" alt="商品照片預覽"><p class="hint">照片只會在目前頁面預覽，不會上傳或保存到雲端。</p></div>
+      <div class="field"><label for="name">商品名稱</label><input id="name" placeholder="例如：柔軟針織開襟衫" required></div>
+      <div class="grid">
+        <div class="field"><label for="price">價格（元）</label><input id="price" inputmode="numeric" type="number" min="0" placeholder="例如：590"></div>
+        <div class="field"><label for="category">服飾類別</label><select id="category"><option value="小童">小童</option><option value="大童">大童</option><option value="女裝" selected>女裝</option><option value="男裝">男裝</option><option value="其他">其他</option></select></div>
+      </div>
+      <fieldset><legend>收單截止日（選填）</legend><div class="date-fields"><div class="field"><label for="deadlineMonth">月</label><input id="deadlineMonth" type="number" min="1" max="12" step="1" inputmode="numeric" placeholder="月"></div><div class="field"><label for="deadlineDay">日</label><input id="deadlineDay" type="number" min="1" max="31" step="1" inputmode="numeric" placeholder="日"></div></div></fieldset>
+      <div class="field"><label for="colors">顏色</label><input id="colors" placeholder="例如：奶茶、黑色、淺灰"></div>
+      <fieldset id="womenSizes"><legend>女裝尺寸（可複選）</legend><div class="size-actions"><button class="size-all" type="button" data-select-all="womenSizes">全選尺寸</button></div><div class="size-list">
+        <label class="size-choice"><input type="checkbox" name="size" value="S"><span>S</span></label><label class="size-choice"><input type="checkbox" name="size" value="M"><span>M</span></label><label class="size-choice"><input type="checkbox" name="size" value="L"><span>L</span></label><label class="size-choice"><input type="checkbox" name="size" value="XL"><span>XL</span></label><label class="size-choice"><input type="checkbox" name="size" value="FREE"><span>FREE</span></label>
+      </div><div class="field" style="margin:10px 0 0"><label for="womenCustom">自填尺寸（選填；多個尺寸用頓號分開）</label><input id="womenCustom" placeholder="例如：XXL、均碼"></div></fieldset>
+      <fieldset id="bigChildSizes" hidden><legend>大童尺寸選購參考（可複選）</legend><div class="size-actions"><button class="size-all" type="button" data-select-all="bigChildSizes">全選尺寸</button></div><div class="size-list">
+        <label class="size-choice"><input type="checkbox" name="size" value="9：125–135cm（25–30kg）"><span>9：125–135cm（25–30kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="11：135–140cm（30–35kg）"><span>11：135–140cm（30–35kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="13：140–145cm（35–40kg）"><span>13：140–145cm（35–40kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="15：145–150cm（40–45kg）"><span>15：145–150cm（40–45kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="17：150–160cm（45–50kg）"><span>17：150–160cm（45–50kg）</span></label>
+      </div><div class="field" style="margin:10px 0 0"><label for="bigCustom">自填尺寸（選填）</label><input id="bigCustom" placeholder="自行輸入其他尺寸"></div></fieldset>
+      <fieldset id="smallChildSizes" hidden><legend>小童尺寸選購參考（可複選）</legend><div class="size-actions"><button class="size-all" type="button" data-select-all="smallChildSizes">全選尺寸</button></div><div class="size-list">
+        <label class="size-choice"><input type="checkbox" name="size" value="3：85cm以下（10kg以下）"><span>3：85cm以下（10kg以下）</span></label><label class="size-choice"><input type="checkbox" name="size" value="5：85–95cm（10–15kg）"><span>5：85–95cm（10–15kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="7：95–105cm（15–17kg）"><span>7：95–105cm（15–17kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="9：105–112cm（17–20kg）"><span>9：105–112cm（17–20kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="11：112–120cm（20–23kg）"><span>11：112–120cm（20–23kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="13：125–135cm（25–30kg）"><span>13：125–135cm（25–30kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="15：135–140cm（30–35kg）"><span>15：135–140cm（30–35kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="17：145–150cm（35–40kg）"><span>17：145–150cm（35–40kg）</span></label><label class="size-choice"><input type="checkbox" name="size" value="19：150–155cm（40–45kg）"><span>19：150–155cm（40–45kg）</span></label>
+      </div><div class="field" style="margin:10px 0 0"><label for="smallCustom">自填尺寸（選填）</label><input id="smallCustom" placeholder="自行輸入其他尺寸"></div></fieldset>
+      <fieldset id="otherSizes" hidden><legend>尺寸</legend><div class="field"><label for="otherCustom">自填尺寸（可用頓號分隔多個尺寸）</label><input id="otherCustom" placeholder="例如：M、L、XL"></div></fieldset>
+      <fieldset id="measurementsFieldset" hidden><legend>尺寸平量（選填）</legend><p class="hint">女裝或男裝選取／輸入尺寸後，會顯示各尺寸的平量欄位。</p><div id="measurementGroups"></div></fieldset>
+      <div class="field"><label for="description">商品特色／補充說明</label><textarea id="description" placeholder="例如：親膚柔軟、適合日常穿搭"></textarea></div>
+      <button class="primary" type="submit">產生 LINE 貼文</button>
+    </form>
+    <section class="result" aria-labelledby="resultTitle"><h2 id="resultTitle">貼文預覽</h2><textarea id="post" aria-label="產生的貼文" placeholder="填寫商品名稱後，按「產生 LINE 貼文」"></textarea><div class="actions"><button class="secondary" id="copy" type="button">複製貼文</button><button class="secondary" id="clear" type="button">清空資料</button></div><p id="status" class="hint" role="status" aria-live="polite"></p></section>
+    <p class="notice">目前版本可在手機或電腦填資料、預覽照片、產生及複製貼文。資料只在本頁暫時使用；關閉或重新整理後不保證保留。OneDrive／Excel 雲端保存、商品搜尋與網站發布尚未設定。</p>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    let previewUrl = '';
+    let measurementValues = {};
+    const sizeFields = { '女裝': $('womenSizes'), '大童': $('bigChildSizes'), '小童': $('smallChildSizes'), '男裝': $('otherSizes'), '其他': $('otherSizes') };
+    const measurementFields = [['chestWidth','胸寬'],['garmentLength','衣長'],['waistWidth','腰寬'],['hipWidth','臀寬'],['pantsLength','褲長']];
+    const measurementKey = (category, size) => `${category}::${size}`;
+    function getMeasurementSizes() {
+      const category = $('category').value;
+      if (category === '女裝') return [...new Set([...$('womenSizes').querySelectorAll('input[name="size"]:checked')].map(input => input.value).concat($('womenCustom').value.split(/[、,，\s]+/).map(x => x.trim()).filter(Boolean)))];
+      if (category === '男裝') return [...new Set($('otherCustom').value.split(/[、,，\s]+/).map(x => x.trim()).filter(Boolean))];
+      return [];
+    }
+    function saveMeasurementValues() {
+      document.querySelectorAll('.measurement-size').forEach(group => {
+        measurementValues[measurementKey(group.dataset.category, group.dataset.size)] = Object.fromEntries([...group.querySelectorAll('[data-measure-field]')].map(input => [input.dataset.measureField, input.value.trim()]));
+      });
+    }
+    function renderMeasurementFields() {
+      saveMeasurementValues();
+      const category = $('category').value;
+      const sizes = getMeasurementSizes();
+      const show = (category === '女裝' || category === '男裝') && sizes.length > 0;
+      $('measurementsFieldset').hidden = !show;
+      const container = $('measurementGroups');
+      container.replaceChildren();
+      if (!show) return;
+      sizes.forEach((size, sizeIndex) => {
+        const key = measurementKey(category, size);
+        const group = document.createElement('section'); group.className = 'measurement-size'; group.dataset.category = category; group.dataset.size = size;
+        const heading = document.createElement('h3'); heading.textContent = `${size} 尺寸`; group.append(heading);
+        const grid = document.createElement('div'); grid.className = 'measurement-size-grid';
+        measurementFields.forEach(([fieldKey, labelText], fieldIndex) => {
+          const field = document.createElement('div'); field.className = 'field';
+          const id = `measure-${sizeIndex}-${fieldIndex}`;
+          const label = document.createElement('label'); label.htmlFor = id; label.textContent = `${labelText}（cm）`;
+          const input = document.createElement('input'); input.id = id; input.type = 'number'; input.min = '0'; input.step = '0.1'; input.inputMode = 'decimal'; input.placeholder = '選填'; input.dataset.measureField = fieldKey; input.value = measurementValues[key]?.[fieldKey] || ''; input.addEventListener('input', saveMeasurementValues);
+          field.append(label, input); grid.append(field);
+        });
+        group.append(grid); container.append(group);
+      });
+    }
+    function updateSizeFields() { Object.entries(sizeFields).forEach(([category, field]) => { field.hidden = category !== $('category').value; }); renderMeasurementFields(); }
+    $('category').addEventListener('change', updateSizeFields);
+    document.querySelectorAll('input[name="size"]').forEach(input => input.addEventListener('change', renderMeasurementFields));
+    $('womenCustom').addEventListener('change', renderMeasurementFields);
+    $('otherCustom').addEventListener('change', renderMeasurementFields);
+    document.querySelectorAll('[data-select-all]').forEach(button => button.addEventListener('click', () => {
+      const boxes = [...$(button.dataset.selectAll).querySelectorAll('input[name="size"]')];
+      const select = !boxes.every(box => box.checked); boxes.forEach(box => { box.checked = select; }); button.textContent = select ? '取消全選' : '全選尺寸'; renderMeasurementFields();
+    }));
+    updateSizeFields();
+    $('photo').addEventListener('change', event => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      const file = event.target.files && event.target.files[0]; const image = $('preview');
+      if (!file) { image.style.display = 'none'; image.removeAttribute('src'); return; }
+      previewUrl = URL.createObjectURL(file); image.src = previewUrl; image.style.display = 'block';
+    });
+    $('productForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const name = $('name').value.trim(); if (!name) { $('name').focus(); return; }
+      const deadlineMonth = $('deadlineMonth').value.trim(), deadlineDay = $('deadlineDay').value.trim();
+      if (Boolean(deadlineMonth) !== Boolean(deadlineDay)) { $('status').textContent = '請同時填寫月份和日期，或兩格都留空。'; (deadlineMonth ? $('deadlineDay') : $('deadlineMonth')).focus(); return; }
+      const category = $('category').value, price = $('price').value.trim();
+      const activeSizeField = sizeFields[category];
+      const selectedSizes = [...activeSizeField.querySelectorAll('input[name="size"]:checked')].map(input => input.value);
+      const customInput = ({ '女裝': $('womenCustom'), '大童': $('bigCustom'), '小童': $('smallCustom'), '男裝': $('otherCustom'), '其他': $('otherCustom') })[category];
+      const customSize = customInput.value.trim(); if (customSize) selectedSizes.push(customSize);
+      saveMeasurementValues();
+      const measurements = [];
+      if (category === '女裝' || category === '男裝') getMeasurementSizes().forEach(size => {
+        const values = measurementValues[measurementKey(category, size)] || {};
+        const details = measurementFields.filter(([key]) => values[key]).map(([key, label]) => `${label}：${values[key]}cm`);
+        if (details.length) measurements.push(`${size}：\n${details.join('\n')}`);
+      });
+      const lines = [category, deadlineMonth && deadlineDay ? `收單截止日：${deadlineMonth}月${deadlineDay}日` : '', `✨ ${name}`, price ? `💰 價格：NT$${Number(price).toLocaleString('zh-TW')}` : '', $('colors').value.trim() ? `🎨 顏色：${$('colors').value.trim()}` : '', selectedSizes.length ? `📏 尺寸選購參考：\n${selectedSizes.join('\n')}` : '', measurements.length ? `📐 尺寸平量：\n${measurements.join('\n\n')}` : '', $('description').value.trim(), '', '訂貨及諮詢請用官方line,搜尋  ＠suncheese'].filter((line, index) => line || index === 8);
+      $('post').value = lines.join('\n'); $('status').textContent = '貼文已產生，可再編輯後複製。';
+    });
+    $('copy').addEventListener('click', async () => {
+      const post = $('post'); if (!post.value.trim()) { $('status').textContent = '請先產生或輸入貼文。'; return; }
+      try { await navigator.clipboard.writeText(post.value); $('status').textContent = '已複製，可貼到 LINE。'; }
+      catch { post.focus(); post.select(); $('status').textContent = '請長按選取貼文並複製。'; }
+    });
+    $('clear').addEventListener('click', () => {
+      $('productForm').reset(); $('post').value = ''; $('status').textContent = ''; measurementValues = {}; renderMeasurementFields();
+      $('preview').style.display = 'none'; $('preview').removeAttribute('src'); if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = '';
+    });
+  </script>
+</body>
+</html>
